@@ -39,6 +39,8 @@
 
 // Settings Options
 "Settings_Tweak_Injection" = "Tweak Injection";
+"Settings_Auto_Jailbreak" = "Automatic Jailbreak";
+"Settings_Exit_When_Jailbroken" = "Exit When Jailbroken";
 "Settings_iDownload" = "iDownload (Developer Shell)";
 "Settings_Verbose_Logs" = "Verbose Logs";
 "Settings_Apps_JIT" = "Allow JIT in Apps";

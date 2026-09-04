@@ -16,13 +16,28 @@
 #import <pthread.h>
 #import <libjailbreak/libjailbreak.h>
 
+static NSTimeInterval const DO_AUTO_ELIGIBILITY_POLL_INTERVAL = 0.5;
+static NSInteger const DO_AUTO_MAX_ELIGIBILITY_POLLS = 20;
+static NSTimeInterval const DO_AUTO_RETRY_DELAY_SECONDS = 30.0;
+static NSInteger const DO_AUTO_MAX_ATTEMPTS = 2;
+static NSTimeInterval const DO_AUTO_EXIT_DELAY_SECONDS = 3.0;
+
 @interface DOMainViewController ()
 
 @property DOJailbreakButton *jailbreakBtn;
 @property NSArray<NSLayoutConstraint *> *jailbreakButtonConstraints;
 @property DOActionMenuButton *updateButton;
+@property DOActionMenuView *actionView;
+@property DOHeaderView *headerView;
 @property(nonatomic) BOOL hideStatusBar;
 @property(nonatomic) BOOL hideHomeIndicator;
+@property(nonatomic) NSTimer *automaticEligibilityTimer;
+@property(nonatomic) NSTimer *automaticRetryTimer;
+@property(nonatomic) NSTimer *alreadyJailbrokenExitTimer;
+@property(nonatomic) NSInteger automaticEligibilityPollCount;
+@property(nonatomic) NSInteger automaticAttemptCount;
+@property(nonatomic) BOOL automaticJailbreakCancelled;
+@property(nonatomic) BOOL jailbreakAttemptInProgress;
 
 @end
 
@@ -30,7 +45,122 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationDidBecomeActive:) name:UIApplicationDidBecomeActiveNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationWillResignActive:) name:UIApplicationWillResignActiveNotification object:nil];
     [self setupStack];
+}
+
+- (void)viewDidAppear:(BOOL)animated
+{
+    [super viewDidAppear:animated];
+    self.automaticJailbreakCancelled = NO;
+    [self scheduleAutomaticActionIfEligible];
+}
+
+- (void)viewWillDisappear:(BOOL)animated
+{
+    [super viewWillDisappear:animated];
+    [self cancelAutomaticTimers];
+}
+
+- (void)dealloc
+{
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [self cancelAutomaticTimers];
+}
+
+- (void)applicationDidBecomeActive:(NSNotification *)notification
+{
+    self.automaticJailbreakCancelled = NO;
+    [self scheduleAutomaticActionIfEligible];
+}
+
+- (void)applicationWillResignActive:(NSNotification *)notification
+{
+    [self cancelAutomaticTimers];
+}
+
+- (void)cancelAutomaticTimers
+{
+    [self.automaticEligibilityTimer invalidate];
+    [self.automaticRetryTimer invalidate];
+    [self.alreadyJailbrokenExitTimer invalidate];
+    self.automaticEligibilityTimer = nil;
+    self.automaticRetryTimer = nil;
+    self.alreadyJailbrokenExitTimer = nil;
+    self.automaticEligibilityPollCount = 0;
+}
+
+- (BOOL)automaticEnvironmentReady
+{
+    DOEnvironmentManager *environment = [DOEnvironmentManager sharedManager];
+    DOPreferenceManager *preferences = [DOPreferenceManager sharedManager];
+
+    if (!environment.isInstalledThroughTrollStore || !environment.isBootstrapped)
+        return NO;
+    if (!environment.isSupported || otherJailbreakActived(false))
+        return NO;
+    if ([DOUIManager sharedInstance].enabledPackageManagerKeys.count == 0)
+        return NO;
+    if (![preferences boolPreferenceValueForKey:@"autoJailbreakEnabled" fallback:YES])
+        return NO;
+    if ([preferences boolPreferenceValueForKey:@"removeJailbreakEnabled" fallback:NO])
+        return NO;
+    return YES;
+}
+
+- (void)scheduleAutomaticActionIfEligible
+{
+    if (!self.isViewLoaded || !self.jailbreakBtn ||
+        UIApplication.sharedApplication.applicationState != UIApplicationStateActive || self.jailbreakAttemptInProgress)
+        return;
+
+    DOEnvironmentManager *environment = [DOEnvironmentManager sharedManager];
+    BOOL isJailbroken = environment.isJailbroken;
+    BOOL exitEnabled = [[DOPreferenceManager sharedManager] boolPreferenceValueForKey:@"exitWhenJailbroken" fallback:NO];
+    if (isJailbroken) {
+        if (exitEnabled && !self.alreadyJailbrokenExitTimer) {
+            self.alreadyJailbrokenExitTimer = [NSTimer scheduledTimerWithTimeInterval:DO_AUTO_EXIT_DELAY_SECONDS repeats:NO block:^(NSTimer *timer) {
+                self.alreadyJailbrokenExitTimer = nil;
+                if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive &&
+                    [DOEnvironmentManager sharedManager].isJailbroken &&
+                    [[DOPreferenceManager sharedManager] boolPreferenceValueForKey:@"exitWhenJailbroken" fallback:NO]) {
+                    exit(0);
+                }
+            }];
+        }
+        return;
+    }
+
+    if (self.automaticJailbreakCancelled || self.automaticEligibilityTimer || self.automaticRetryTimer)
+        return;
+
+    if ([self automaticEnvironmentReady]) {
+        [self beginJailbreakAutomatically:YES];
+        return;
+    }
+
+    self.automaticEligibilityPollCount = 0;
+    __weak typeof(self) weakSelf = self;
+    self.automaticEligibilityTimer = [NSTimer scheduledTimerWithTimeInterval:DO_AUTO_ELIGIBILITY_POLL_INTERVAL repeats:YES block:^(NSTimer *timer) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+
+        self.automaticEligibilityPollCount += 1;
+        if (self.automaticEligibilityPollCount > DO_AUTO_MAX_ELIGIBILITY_POLLS) {
+            [timer invalidate];
+            self.automaticEligibilityTimer = nil;
+            self.automaticEligibilityPollCount = 0;
+            return;
+        }
+
+        if ([self automaticEnvironmentReady]) {
+            [timer invalidate];
+            self.automaticEligibilityTimer = nil;
+            self.automaticEligibilityPollCount = 0;
+            [self beginJailbreakAutomatically:YES];
+        }
+    }];
 }
 
 -(void)setupStack
@@ -77,6 +207,7 @@
         [DOGlobalAppearance mainSubtitleString:[[DOEnvironmentManager sharedManager] versionSupportString]],
         [DOGlobalAppearance secondarySubtitleString:DOLocalizedString(@"Credits_Made_By")],
     ]];
+    self.headerView = headerView;
     
     [stackView addArrangedSubview:headerView];
 
@@ -104,6 +235,7 @@
             [self.navigationController pushViewController:[[DOCreditsViewController alloc] init] animated:YES];
         }]
     ] delegate:self];
+    self.actionView = actionView;
     
     [stackView addArrangedSubview: actionView];
 
@@ -148,16 +280,7 @@
 /********************************** roothide specific ************************************/
 
 
-        [actionView hide];
-        [self.jailbreakBtn expandButton: self.jailbreakButtonConstraints];
-
-        self.updateButton.userInteractionEnabled = NO;
-        [UIView animateWithDuration:0.75 delay:0 usingSpringWithDamping:0.9 initialSpringVelocity:2.0  options: UIViewAnimationOptionCurveEaseInOut animations:^{
-            [headerView setTransform:CGAffineTransformMakeTranslation(0, -25)];
-            self.updateButton.alpha = 0;
-        } completion:nil];
-        
-        [self startJailbreak];
+        [self beginJailbreakAutomatically:NO];
         
     }]];
     self.jailbreakBtn.enabled = !isJailbroken && isSupported;
@@ -210,9 +333,34 @@
     [self.jailbreakBtn.button setTitle:[self jailbreakButtonTitle] forState:UIControlStateNormal];
 }
 
-- (void)startJailbreak
+- (void)beginJailbreakAutomatically:(BOOL)automatic
+{
+    [self cancelAutomaticTimers];
+    if (!automatic)
+        self.automaticJailbreakCancelled = YES;
+
+    if (self.jailbreakAttemptInProgress)
+        return;
+
+    [self.actionView hide];
+    [self.jailbreakBtn expandButton:self.jailbreakButtonConstraints];
+    self.jailbreakBtn.button.userInteractionEnabled = NO;
+    self.updateButton.userInteractionEnabled = NO;
+    [UIView animateWithDuration:0.75 delay:0 usingSpringWithDamping:0.9 initialSpringVelocity:2.0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+        [self.headerView setTransform:CGAffineTransformMakeTranslation(0, -25)];
+        self.updateButton.alpha = 0;
+    } completion:nil];
+
+    self.jailbreakAttemptInProgress = YES;
+    [self startJailbreakAutomatically:automatic];
+}
+
+- (void)startJailbreakAutomatically:(BOOL)automatic
 {
     DOJailbreaker *jailbreaker = [[DOJailbreaker alloc] init];
+
+    if (automatic)
+        self.automaticAttemptCount += 1;
 
     [[DOUIManager sharedInstance] startLogCapture];
     
@@ -231,10 +379,29 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             if (error && showLogs) {
                 [[DOUIManager sharedInstance] sendLog:[NSString stringWithFormat:@"Jailbreak failed with error: %@", error] debug:NO];
-                [self.navigationController pushViewController:[[DOLogCrashViewController alloc] initWithTitle:[error localizedDescription]] animated:YES];
+                self.jailbreakAttemptInProgress = NO;
+                if (automatic && self.automaticAttemptCount < DO_AUTO_MAX_ATTEMPTS) {
+                    [[DOUIManager sharedInstance] sendLog:DOLocalizedString(@"Auto_Jailbreak_Retry") debug:NO];
+                    __weak typeof(self) weakSelf = self;
+                    self.automaticRetryTimer = [NSTimer scheduledTimerWithTimeInterval:DO_AUTO_RETRY_DELAY_SECONDS repeats:NO block:^(NSTimer *timer) {
+                        __strong typeof(weakSelf) self = weakSelf;
+                        if (!self) return;
+                        self.automaticRetryTimer = nil;
+                        if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive &&
+                            [self automaticEnvironmentReady] &&
+                            !self.jailbreakAttemptInProgress) {
+                            self.jailbreakAttemptInProgress = YES;
+                            [self startJailbreakAutomatically:YES];
+                        }
+                    }];
+                }
+                else {
+                    [self.navigationController pushViewController:[[DOLogCrashViewController alloc] initWithTitle:[error localizedDescription]] animated:YES];
+                }
             }
             else if (error && !showLogs) {
                 // Used when there is an error that is explainable in such detail that additional logs are not needed
+                self.jailbreakAttemptInProgress = NO;
                 UIAlertController *alertController = [UIAlertController alertControllerWithTitle:DOLocalizedString(@"Log_Error") message:[error localizedDescription] preferredStyle:UIAlertControllerStyleAlert];
                 UIAlertAction *rebootAction = [UIAlertAction actionWithTitle:DOLocalizedString(@"Button_Reboot") style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                     exec_cmd_trusted(JBROOT_PATH("/sbin/reboot"), NULL);
@@ -243,6 +410,7 @@
                 [self presentViewController:alertController animated:YES completion:nil];
             }
             else if (didRemove) {
+                self.jailbreakAttemptInProgress = NO;
                 UIAlertController *alertController = [UIAlertController alertControllerWithTitle:DOLocalizedString(@"Removed_Jailbreak_Alert_Title") message:DOLocalizedString(@"Removed_Jailbreak_Alert_Message") preferredStyle:UIAlertControllerStyleAlert];
                 UIAlertAction *rebootAction = [UIAlertAction actionWithTitle:DOLocalizedString(@"Button_Close") style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                     exit(0);
@@ -252,6 +420,7 @@
             }
             else {
                 // No errors
+                self.jailbreakAttemptInProgress = NO;
                 [[DOUIManager sharedInstance] completeJailbreak];
                 [self fadeToBlack: ^{
                     [jailbreaker finalize];

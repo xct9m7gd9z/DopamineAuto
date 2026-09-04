@@ -39,6 +39,8 @@
 
 // Settings Toggles
 "Settings_Tweak_Injection" = "插件注入";
+"Settings_Auto_Jailbreak" = "自動越獄";
+"Settings_Exit_When_Jailbroken" = "已越獄時自動退出";
 "Settings_iDownload" = "iDownload (开发商终端)";
 "Settings_Verbose_Logs" = "詳細日誌";
 /*Settings_Apps_JIT*/

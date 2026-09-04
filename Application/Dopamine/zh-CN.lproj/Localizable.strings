@@ -38,6 +38,8 @@
 "Button_Reboot" = "重启";
 
 // Settings Options
+"Settings_Auto_Jailbreak" = "自动越狱";
+"Settings_Exit_When_Jailbroken" = "已越狱时自动退出";
 "Settings_Tweak_Injection" = "插件注入";
 "Settings_iDownload" = "iDownload (开发者终端)";
 "Settings_Verbose_Logs" = "详细日志";

@@ -21,9 +21,9 @@ class DopamineAutoRootHideSourceTests(unittest.TestCase):
 
         for key, default in (("autoJailbreakEnabled", "YES"), ("exitWhenJailbroken", "NO")):
             pattern = re.compile(
-                rf'property:@?YES forKey:"enabled"[\s\S]+?'
-                rf'property:@"{key}" forKey:"key"[\s\S]+?'
-                rf'property:@{default} forKey:"default"',
+                rf'setProperty:@?YES forKey:@"enabled"[\s\S]+?'
+                rf'setProperty:@"{key}" forKey:@"key"[\s\S]+?'
+                rf'setProperty:@{default} forKey:@"default"',
                 re.MULTILINE,
             )
             self.assertRegex(source, pattern)
