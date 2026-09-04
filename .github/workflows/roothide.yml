@@ -107,10 +107,8 @@ jobs:
         run: |
           set -euo pipefail
           export THEOS="$GITHUB_WORKSPACE/theos"
-          if [ -e "$(xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc.modulemap" ]; then
-            rm -rf "$(xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc" \
-              "$(xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc.modulemap"
-          fi
+          rm -rf "$(xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc" \
+            "$(xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc.modulemap"
           gmake -j"$(sysctl -n hw.logicalcpu)" NIGHTLY=1
           mv "$GITHUB_WORKSPACE/Application/Dopamine.tipa" \
             "$GITHUB_WORKSPACE/Application/DopamineAuto.tipa"

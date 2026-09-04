@@ -65,6 +65,16 @@ class StrictRootHideMacOSWorkflowTests(unittest.TestCase):
         self.assertIn('gmake -j"$(sysctl -n hw.logicalcpu)" NIGHTLY=1', self.workflow)
         self.assertIn("Application/Dopamine.tipa", self.workflow)
 
+    def test_xpc_sdk_headers_are_removed_unconditionally(self):
+        self.assertIn(
+            'rm -rf "$(xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc"',
+            self.workflow,
+        )
+        self.assertNotIn(
+            'if [ -e "$(xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc.modulemap" ]',
+            self.workflow,
+        )
+
     def test_identity_is_inspected_before_upload(self):
         for required in (
             'com.opa334.Dopamine-roothide',
