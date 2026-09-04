@@ -75,6 +75,10 @@ class StrictRootHideMacOSWorkflowTests(unittest.TestCase):
         self.assertIn("/usr/include/XPC.modulemap", makefile)
         self.assertIn("rm -rf .include/xpc", makefile)
 
+    def test_roothidehooks_allows_private_iOS_api_availability(self):
+        makefile = (ROOT / "BaseBin/roothidehooks/Makefile").read_text(encoding="utf-8")
+        self.assertIn("roothidehooks_CFLAGS = -Werror -Wno-availability", makefile)
+
     def test_identity_is_inspected_before_upload(self):
         for required in (
             'com.opa334.Dopamine-roothide',
