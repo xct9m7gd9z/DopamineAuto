@@ -37,6 +37,15 @@ Manual use remains available. Tapping Jailbreak during the countdown cancels
 the timer and starts immediately. Opening Settings or moving the app to the
 background cancels the pending automatic attempt.
 
+Add an `Exit When Already Jailbroken` switch, enabled by default. If Shortcuts
+opens DopamineAuto while Dopamine is already active, wait three seconds and
+terminate the app. This prevents repeated charging events from leaving the app
+open unnecessarily.
+
+After a new jailbreak succeeds, preserve the upstream `finalize` path. It
+performs the required jailbreak finalization and userspace transition, which
+closes the app. Do not call `exit` before finalization finishes.
+
 ## Eligibility Checks
 
 Automatic execution starts only when all of these conditions are true:
@@ -66,6 +75,7 @@ Keep automatic state in the main view controller:
 - whether the countdown was cancelled for this app process;
 - whether a jailbreak attempt is active;
 - automatic attempt number, limited to two.
+- whether an already-jailbroken exit was scheduled.
 
 Do not persist the attempt count across app launches. External power automation
 may intentionally relaunch the app after a failed or interrupted exploit.
@@ -85,6 +95,7 @@ Dopamine error/log interface. Manual recovery remains possible after relaunch.
 ## Safety Properties
 
 - Never invoke the remove-jailbreak path automatically.
+- Never terminate the app before successful jailbreak finalization.
 - Never start while the app is inactive or backgrounded.
 - Cancel timers when the controller disappears.
 - Re-check every eligibility condition when the timer fires, not only when it is
@@ -96,7 +107,8 @@ Dopamine error/log interface. Manual recovery remains possible after relaunch.
 ## Localization
 
 Add English, Simplified Chinese, and Traditional Chinese strings for the setting,
-countdown, cancellation, and retry status. Other locales fall back to English.
+countdown, cancellation, retry status, and already-jailbroken exit status. Other
+locales fall back to English.
 
 ## Verification
 
@@ -116,3 +128,5 @@ that `Dopamine.tipa` is produced. Final device verification must cover:
 5. A first retryable failure retries once after 30 seconds.
 6. A second failure stops and preserves logs.
 7. Successful jailbreak completes the upstream finalize/respring flow.
+8. Launching while already jailbroken exits after three seconds when enabled.
+9. Disabling already-jailbroken exit leaves the app open normally.
