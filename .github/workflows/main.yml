@@ -37,6 +37,9 @@ jobs:
         with:
             submodules: recursive
 
+      - name: Test DopamineAuto source contracts
+        run: python3 -m unittest Tests.test_dopamine_auto -v
+
       - name: Install Procursus
         uses: dhinakg/procursus-action@main
         with:
@@ -98,11 +101,12 @@ jobs:
           export BASEDIR="$(pwd)"
           export THEOS="${BASEDIR}/theos"
           gmake -j$(sysctl -n hw.logicalcpu) NIGHTLY=1
+          mv "${BASEDIR}/Application/Dopamine.tipa" "${BASEDIR}/Application/DopamineAuto.tipa"
 
       - name: Upload Artifact
         id: dopamine-latest-upload
         uses: actions/upload-artifact@main
         with:
-          name: Dopamine
+          name: DopamineAuto-${{ env.shorthash }}
           path: |
-            ${{ github.workspace }}/Application/Dopamine.ipa
+            ${{ github.workspace }}/Application/DopamineAuto.tipa
