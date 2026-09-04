@@ -88,8 +88,9 @@ jailbreakd: .build .include libjailbreak
 	rm -rf .include
 	mkdir -p .include
 	cp -r _external/include/* .include
-# If the SDK already ships XPC (it does so in iOS 17.4+), remove the local copy of it
-ifneq (,$(wildcard $(shell xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc.modulemap))
+# If the SDK already ships XPC (it does so in iOS 17.4+), remove the local copy of it.
+# Xcode 16.4 exposes the module map as XPC.modulemap, while older SDKs use lowercase.
+ifneq (,$(wildcard $(shell xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc.modulemap)$(wildcard $(shell xcrun --sdk iphoneos --show-sdk-path)/usr/include/XPC.modulemap))
 	rm -rf .include/xpc
 endif
 
