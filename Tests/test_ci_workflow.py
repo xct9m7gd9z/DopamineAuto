@@ -34,7 +34,11 @@ class StrictRootHideMacOSWorkflowTests(unittest.TestCase):
 
     def test_toolchain_and_sdk_are_pinned(self):
         self.assertIn(
-            "THEOS_COMMIT: 5280bd038207e14f8bd76f5417aa2fe641c03228",
+            "THEOS_REPOSITORY: https://github.com/roothide/theos.git",
+            self.workflow,
+        )
+        self.assertIn(
+            "THEOS_COMMIT: 88506b2c22e9e07dd4ed055f23c9e398a117a2c7",
             self.workflow,
         )
         self.assertIn(

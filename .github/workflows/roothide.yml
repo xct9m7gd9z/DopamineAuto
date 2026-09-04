@@ -26,7 +26,8 @@ jobs:
     timeout-minutes: 60
     env:
       XCODE_VERSION: "16.4"
-      THEOS_COMMIT: 5280bd038207e14f8bd76f5417aa2fe641c03228
+      THEOS_REPOSITORY: https://github.com/roothide/theos.git
+      THEOS_COMMIT: 88506b2c22e9e07dd4ed055f23c9e398a117a2c7
       TRUSTCACHE_COMMIT: aa0e8847529cf76576fce8d2dbc9e088c8f1a0df
       IOS_SDK_URL: https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
       IOS_SDK_SHA256: 5e0fd3f01266cce4ce012d4a99b38eb56578fca40d09edc81cd83dee958202fb
@@ -71,7 +72,7 @@ jobs:
           set -euo pipefail
           export THEOS="$GITHUB_WORKSPACE/theos"
 
-          git clone --no-checkout https://github.com/theos/theos.git "$THEOS"
+          git clone --no-checkout "$THEOS_REPOSITORY" "$THEOS"
           git -C "$THEOS" checkout --detach "$THEOS_COMMIT"
           git -C "$THEOS" submodule update --init --recursive
 
