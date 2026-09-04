@@ -1,23 +1,26 @@
-name: "Dopamine: build and upload"
+name: "DopamineAuto: test, build, and upload"
 
 on:
   push:
     branches:
-      - '*'
+      - "*"
     paths-ignore:
       - ".gitignore"
   pull_request:
     branches:
-      - '*'
+      - "*"
     paths-ignore:
       - ".gitignore"
   workflow_dispatch:
   schedule:
-    - cron: '0 0 1 1 *'
-    - cron: '0 0 1 4 *'
-    - cron: '0 0 30 6 *'
-    - cron: '0 0 28 9 *'
-    - cron: '0 0 27 12 *'
+    - cron: "0 0 1 1 *"
+    - cron: "0 0 1 4 *"
+    - cron: "0 0 30 6 *"
+    - cron: "0 0 28 9 *"
+    - cron: "0 0 27 12 *"
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -25,88 +28,129 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-latest
-    steps:
-      - name: Xcode Setup
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      XCODE_VERSION: "16.4"
+      THEOS_COMMIT: 5280bd038207e14f8bd76f5417aa2fe641c03228
+      TRUSTCACHE_COMMIT: aa0e8847529cf76576fce8d2dbc9e088c8f1a0df
+      IOS_SDK_URL: https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
+      IOS_SDK_SHA256: 5e0fd3f01266cce4ce012d4a99b38eb56578fca40d09edc81cd83dee958202fb
 
-      - name: Checkout
-        uses: actions/checkout@main
+    steps:
+      - name: Check out source and submodules
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-            submodules: recursive
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@1242409711ff5721add51979e9e11e23ebb7e5a4
+        with:
+          xcode-version: "16.4"
+
+      - name: Verify Xcode
+        run: |
+          set -euo pipefail
+          installed_xcode="$(xcodebuild -version | awk '/^Xcode / { print $2 }')"
+          test "$installed_xcode" = "$XCODE_VERSION"
+          xcodebuild -version
 
       - name: Test DopamineAuto source contracts
-        run: python3 -m unittest Tests.test_dopamine_auto -v
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s Tests -p "test_*.py" -v
 
       - name: Install Procursus
-        uses: dhinakg/procursus-action@main
+        uses: dhinakg/procursus-action@4526d5e64410da26bea8073926c0bf8e779293f1
         with:
           packages: ldid findutils sed coreutils make
 
-      - name: Install better GNU Make
+      - name: Install build packages
         run: |
-          brew install make
-          echo "PATH=$(brew --prefix make)/libexec/gnubin:$PATH" >> $GITHUB_ENV
+          set -euo pipefail
+          brew install make libarchive openssl@3
+          echo "PATH=$(brew --prefix make)/libexec/gnubin:$PATH" >> "$GITHUB_ENV"
 
-      - name: Install THEOS
+      - name: Install pinned THEOS and SDK
         run: |
-          set -x
-          export BASEDIR="$(pwd)"
-          export THEOS="${BASEDIR}/theos"
-          mkdir -p $THEOS
-          curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos >> install-theos.sh
-          gsed -E "/^\s*get_theos\s*$/,+1 s/^(\s*)(get_sdks)\s*$/\1mkdir -p \${THEOS}\/sdks\n\1touch \${THEOS}\/sdks\/sdk\n\1\2/g" -i install-theos.sh
-          bash install-theos.sh
-          curl -L https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz --output $THEOS/sdks/iPhoneOS16.5.sdk.tar.xz
-          gunzip $THEOS/sdks/iPhoneOS16.5.sdk.tar.xz
-          tar -xf $THEOS/sdks/iPhoneOS16.5.sdk.tar -C $THEOS/sdks
-          rm $THEOS/sdks/iPhoneOS16.5.sdk.tar
-          cd $BASEDIR
+          set -euo pipefail
+          export THEOS="$GITHUB_WORKSPACE/theos"
 
-      - name: Build and Install trustcache
+          git clone --no-checkout https://github.com/theos/theos.git "$THEOS"
+          git -C "$THEOS" checkout --detach "$THEOS_COMMIT"
+          git -C "$THEOS" submodule update --init --recursive
+
+          mkdir -p "$THEOS/sdks"
+          sdk_archive="$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz"
+          curl --fail --location --retry 3 --retry-delay 2 \
+            "$IOS_SDK_URL" --output "$sdk_archive"
+          printf "%s  %s\n" "$IOS_SDK_SHA256" "$sdk_archive" \
+            | shasum -a 256 -c -
+          tar -xJf "$sdk_archive" -C "$THEOS/sdks"
+          rm -f "$sdk_archive"
+
+      - name: Build pinned trustcache
         run: |
-          set -x
-          git clone https://github.com/CRKatri/trustcache
-          cd trustcache
-          export CFLAGS="$CFLAGS -I$(brew --prefix openssl)/include -arch arm64"
-          export LDFLAGS="$LDFLAGS -L$(brew --prefix openssl)/lib -arch arm64"
-          gmake -j$(sysctl -n hw.logicalcpu) OPENSSL=1
-          sudo cp trustcache /opt/procursus/bin/
+          set -euo pipefail
+          git clone --no-checkout https://github.com/CRKatri/trustcache.git trustcache
+          git -C trustcache checkout --detach "$TRUSTCACHE_COMMIT"
 
-      - name: Set Environment Variables
+          openssl_prefix="$(brew --prefix openssl@3)"
+          export CFLAGS="${CFLAGS:-} -I$openssl_prefix/include -arch arm64"
+          export LDFLAGS="${LDFLAGS:-} -L$openssl_prefix/lib -arch arm64"
+          gmake -C trustcache -j"$(sysctl -n hw.logicalcpu)" OPENSSL=1
+          sudo cp trustcache/trustcache /opt/procursus/bin/
+
+      - name: Set build metadata
         run: |
-          set -x
-          T2=$(TZ=UTC-2 date +'%Y%m%d_%H%M%S')
-          TS=$(date -j -f "%Y%m%d_%H%M%S" "${T2}" +%s)
-          SHASH=$(git rev-parse --short HEAD)
-          echo "ctime=${T2}" >> $GITHUB_ENV
-          echo "ctimestamp=${TS}" >> $GITHUB_ENV
-          echo "shorthash=${SHASH}" >> $GITHUB_ENV
+          set -euo pipefail
+          echo "ctime=$(date -u +'%Y%m%d_%H%M%S')" >> "$GITHUB_ENV"
+          echo "ctimestamp=$(date -u +'%s')" >> "$GITHUB_ENV"
+          echo "shorthash=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
-      - name: Install libarchive
+      - name: Download verified Bootstraps
         run: |
-          brew install libarchive
+          set -euo pipefail
+          Application/Dopamine/Resources/download_bootstraps.sh
 
-      - name: Download Bootstraps
+      - name: Build DopamineAuto
         run: |
-            set -x
-            cd Application/Dopamine/Resources
-            ./download_bootstraps.sh
+          set -euo pipefail
+          export BASEDIR="$GITHUB_WORKSPACE"
+          export THEOS="$GITHUB_WORKSPACE/theos"
+          gmake -j"$(sysctl -n hw.logicalcpu)" NIGHTLY=1
+          mv "$BASEDIR/Application/Dopamine.tipa" \
+            "$BASEDIR/Application/DopamineAuto.tipa"
 
-      - name: Build
+      - name: Verify artifact and write summary
         run: |
-          set -x
-          export BASEDIR="$(pwd)"
-          export THEOS="${BASEDIR}/theos"
-          gmake -j$(sysctl -n hw.logicalcpu) NIGHTLY=1
-          mv "${BASEDIR}/Application/Dopamine.tipa" "${BASEDIR}/Application/DopamineAuto.tipa"
+          set -euo pipefail
+          artifact="$GITHUB_WORKSPACE/Application/DopamineAuto.tipa"
+          test -s "$artifact"
+          unzip -t "$artifact"
 
-      - name: Upload Artifact
-        id: dopamine-latest-upload
-        uses: actions/upload-artifact@main
+          artifact_sha="$(shasum -a 256 "$artifact" | awk '{ print $1 }')"
+          bootstrap_manifest="Application/Dopamine/Resources/bootstrap-sha256sums.txt"
+          bootstrap_manifest_sha="$(shasum -a 256 "$bootstrap_manifest" | awk '{ print $1 }')"
+
+          {
+            echo "## DopamineAuto build"
+            echo ""
+            echo "- Source: \`$GITHUB_SHA\`"
+            echo "- Runner image: \`${ImageOS:-macos-15} ${ImageVersion:-unknown}\`"
+            echo "- Xcode: \`$XCODE_VERSION\`"
+            echo "- THEOS: \`$THEOS_COMMIT\`"
+            echo "- SDK SHA-256: \`$IOS_SDK_SHA256\`"
+            echo "- Bootstrap manifest SHA-256: \`$bootstrap_manifest_sha\`"
+            echo "- Artifact SHA-256: \`$artifact_sha\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload DopamineAuto artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: DopamineAuto-${{ env.shorthash }}
-          path: |
-            ${{ github.workspace }}/Application/DopamineAuto.tipa
+          name: DopamineAuto-${{ env.shorthash }}-${{ github.run_number }}
+          path: ${{ github.workspace }}/Application/DopamineAuto.tipa
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
