@@ -90,6 +90,13 @@ class StrictRootHideMacOSWorkflowTests(unittest.TestCase):
         self.assertIn("do_xpc_connection_get_pid", source)
         self.assertNotIn("pid_t clientPid = xpc_connection_get_pid(connection);", source)
 
+    def test_palera1n_dylib_opts_out_of_shared_cache(self):
+        makefile = (ROOT / "Application/Dopamine/Exploits/palera1n/Makefile").read_text(encoding="utf-8")
+        self.assertIn(
+            "palera1n_LDFLAGS = -Wl,-not_for_dyld_shared_cache",
+            makefile,
+        )
+
     def test_identity_is_inspected_before_upload(self):
         for required in (
             'com.opa334.Dopamine-roothide',
