@@ -78,6 +78,7 @@ class StrictRootHideMacOSWorkflowTests(unittest.TestCase):
     def test_roothidehooks_allows_private_iOS_api_availability(self):
         makefile = (ROOT / "BaseBin/roothidehooks/Makefile").read_text(encoding="utf-8")
         self.assertIn("roothidehooks_CFLAGS = -Werror -Wno-availability", makefile)
+        self.assertIn("roothidehooks_OBJCFLAGS = -Wno-availability", makefile)
 
     def test_identity_is_inspected_before_upload(self):
         for required in (

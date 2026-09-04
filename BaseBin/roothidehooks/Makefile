@@ -10,6 +10,7 @@ TWEAK_NAME = roothidehooks
 
 roothidehooks_FILES = $(wildcard *.x) $(wildcard *.c) $(wildcard *.m)
 roothidehooks_CFLAGS = -Werror -Wno-availability -fobjc-arc -I../.include
+roothidehooks_OBJCFLAGS = -Wno-availability
 roothidehooks_LDFLAGS = -rpath @loader_path/.jbroot/Library/Frameworks -rpath @loader_path/fallback -L../libjailbreak -ljailbreak
 roothidehooks_INSTALL_PATH = /basebin
 
