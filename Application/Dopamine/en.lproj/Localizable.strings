@@ -129,3 +129,13 @@
 "Status_Title_Select_Package_Managers" = "Select Package Manager(s)";
 "Select_Package_Managers_Install_Message" = "If you are unsure which one to select, select Sileo";
 "Continue" = "Continue";
+
+// DopamineAuto
+"Settings_Auto_Jailbreak" = "Automatic Jailbreak";
+"Settings_Exit_When_Jailbroken" = "Exit When Already Jailbroken";
+"Auto_Jailbreak_Title" = "Automatic Jailbreak";
+"Auto_Jailbreak_Countdown" = "Jailbreak will start in %ld seconds.";
+"Auto_Jailbreak_Now" = "Jailbreak Now";
+"Auto_Jailbreak_Cancel_This_Launch" = "Cancel This Launch";
+"Auto_Jailbreak_Retry" = "Automatic jailbreak failed. Retrying once in 30 seconds.";
+"Auto_Exit_Already_Jailbroken" = "Already jailbroken. Closing DopamineAuto.";

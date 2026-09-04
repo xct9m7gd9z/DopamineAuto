@@ -124,3 +124,13 @@
 "Status_Title_Select_Package_Managers" = "请选择包管理器";
 "Select_Package_Managers_Install_Message" = "如果你不确定选择哪一个比较好，请选择 Sileo";
 "Continue" = "继续";
+
+// DopamineAuto
+"Settings_Auto_Jailbreak" = "自动越狱";
+"Settings_Exit_When_Jailbroken" = "已越狱时自动关闭";
+"Auto_Jailbreak_Title" = "自动越狱";
+"Auto_Jailbreak_Countdown" = "%ld 秒后开始越狱。";
+"Auto_Jailbreak_Now" = "立即越狱";
+"Auto_Jailbreak_Cancel_This_Launch" = "本次取消";
+"Auto_Jailbreak_Retry" = "自动越狱失败，30 秒后重试一次。";
+"Auto_Exit_Already_Jailbroken" = "设备已经越狱，正在关闭 DopamineAuto。";
