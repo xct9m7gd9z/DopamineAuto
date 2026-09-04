@@ -1,11 +1,24 @@
 #import <Foundation/Foundation.h>
 #import <substrate.h>
 #include <roothide.h>
+#include <dlfcn.h>
 #include "common.h"
 
 #define PROC_PIDPATHINFO_MAXSIZE        (4*MAXPATHLEN)
 
 pid_t __thread gCurrentClientPid = 0;
+
+typedef pid_t (*DOXPCConnectionGetPID)(xpc_connection_t connection);
+
+static pid_t do_xpc_connection_get_pid(xpc_connection_t connection)
+{
+    static DOXPCConnectionGetPID getter;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        getter = (DOXPCConnectionGetPID)dlsym(RTLD_DEFAULT, "xpc_connection_get_pid");
+    });
+    return getter ? getter(connection) : -1;
+}
 
 BOOL preferencePlistNeedsRedirection(NSString *plistPath)
 {
@@ -104,7 +117,7 @@ void* DISPATCH_orig__CFPrefsDaemon_handleMessage_fromPeer_replyHandler__(id self
 void* new__CFPrefsDaemon_handleMessage_fromPeer_replyHandler__(id self, xpc_object_t message, xpc_connection_t connection, void* replyHandler)
 {
     uid_t clientUid = xpc_connection_get_euid(connection);
-    pid_t clientPid = xpc_connection_get_pid(connection);
+    pid_t clientPid = do_xpc_connection_get_pid(connection);
 
 	NSLog(@"CFPrefsDaemon: handleMessage %p/%d pid=%d uid=%d proc=%s", message, xpc_get_type(message)==XPC_TYPE_DICTIONARY, clientPid, clientUid, proc_get_path(clientPid,NULL));
 

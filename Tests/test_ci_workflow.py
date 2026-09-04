@@ -84,6 +84,12 @@ class StrictRootHideMacOSWorkflowTests(unittest.TestCase):
             makefile,
         )
 
+    def test_cfprefsd_resolves_unavailable_xpc_pid_symbol_dynamically(self):
+        source = (ROOT / "BaseBin/roothidehooks/cfprefsd.x").read_text(encoding="utf-8")
+        self.assertIn("dlsym(RTLD_DEFAULT, \"xpc_connection_get_pid\")", source)
+        self.assertIn("do_xpc_connection_get_pid", source)
+        self.assertNotIn("pid_t clientPid = xpc_connection_get_pid(connection);", source)
+
     def test_identity_is_inspected_before_upload(self):
         for required in (
             'com.opa334.Dopamine-roothide',
