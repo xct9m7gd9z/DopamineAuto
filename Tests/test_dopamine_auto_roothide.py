@@ -11,6 +11,7 @@ PROJECT = ROOT / "Application/Dopamine.xcodeproj/project.pbxproj"
 BAD_RECOVERY = ROOT / "Application/Dopamine/Exploits/badRecovery/badRecovery.m"
 FUGU14 = ROOT / "BaseBin/libjailbreak/src/kcall_Fugu14.c"
 ARM64 = ROOT / "BaseBin/libjailbreak/src/kcall_arm64.c"
+JAILBREAKER = ROOT / "Application/Dopamine/Jailbreak/DOJailbreaker.m"
 
 
 class DopamineAutoRootHideSourceTests(unittest.TestCase):
@@ -66,6 +67,24 @@ class DopamineAutoRootHideSourceTests(unittest.TestCase):
 
         self.assertIn("if (fugu14_kcall_init", source)
         self.assertIn("return -1;", source)
+
+    def test_bad_recovery_deinit_cleans_temporary_thread(self):
+        source = BAD_RECOVERY.read_text(encoding="utf-8")
+
+        self.assertRegex(source, r"int exploit_deinit\(void\)[\s\S]{0,300}cleanupFailedBreakCFI")
+
+    def test_bad_recovery_retries_transient_pac_setup_failure(self):
+        source = BAD_RECOVERY.read_text(encoding="utf-8")
+
+        self.assertIn("BAD_RECOVERY_MAX_ATTEMPTS", source)
+        self.assertRegex(source, r"for \([^\n]+BAD_RECOVERY_MAX_ATTEMPTS[\s\S]{0,1200}breakCFI\(\)")
+        self.assertRegex(source, r"breakCFI\(\)[\s\S]{0,1800}cleanupFailedBreakCFI")
+
+    def test_pac_failure_cleans_loaded_pac_exploit(self):
+        source = JAILBREAKER.read_text(encoding="utf-8")
+
+        self.assertRegex(source, r"if \(\[pacBypass run\] != 0\).*?\[pacBypass cleanup\].*?\[kernelExploit cleanup\]",
+                         re.DOTALL)
 
     def test_fugu14_kcall_cannot_wait_forever(self):
         source = FUGU14.read_text(encoding="utf-8")
