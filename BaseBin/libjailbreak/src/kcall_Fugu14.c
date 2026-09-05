@@ -8,6 +8,7 @@
 #include <mach/mach_time.h>
 
 Fugu14KcallThread gFugu14KcallThread;
+static bool gFugu14KcallLockInitialized = false;
 
 uint64_t gUserReturnThreadContext = 0;
 volatile uint64_t gUserReturnDidHappen = 0;
@@ -36,6 +37,14 @@ static uint64_t kcallDeadline(void)
 static bool kcallTimedOut(uint64_t deadline)
 {
 	return kcallNowNs() >= deadline;
+}
+
+static void cleanupFugu14InitThread(thread_t thread)
+{
+	if (thread != MACH_PORT_NULL) {
+		thread_suspend(thread);
+		thread_abort(thread);
+	}
 }
 
 uint64_t mapKernelPage(uint64_t addr)
@@ -93,11 +102,14 @@ uint64_t getUserReturnThreadContext(void)
 
 int fugu14_kcall_init(int (^threadSigner)(mach_port_t threadPort))
 {
-	pthread_mutex_init(&gFugu14KcallThread.lock, NULL);
+	if (!gFugu14KcallLockInitialized) {
+		pthread_mutex_init(&gFugu14KcallThread.lock, NULL);
+		gFugu14KcallLockInitialized = true;
+	}
 
 	// Create a Fugu14-like kcall primitive
 	// First we need a new thread
-	thread_t thread = 0;
+	thread_t thread = MACH_PORT_NULL;
 	kern_return_t kr = thread_create(mach_task_self_, &thread);
 	guard (kr == KERN_SUCCESS) else {
 		puts("[-] fugu14_kcall_init: thread_create failed!");
@@ -108,13 +120,15 @@ int fugu14_kcall_init(int (^threadSigner)(mach_port_t threadPort))
 	uint64_t threadPtr = task_get_ipc_port_kobject(task_self(), thread);
 	guard (threadPtr != 0) else {
 		puts("[-] fugu14_kcall_init: Failed to find thread!");
+		cleanupFugu14InitThread(thread);
 		return -1;
 	}
 	
 	// Get it's state pointer
 	uint64_t actContext = kread_ptr(threadPtr + koffsetof(thread, machine_contextData));
-	guard (threadPtr != 0) else {
+	guard (actContext != 0) else {
 		puts("[-] fugu14_kcall_init: Failed to get thread ACT_CONTEXT!");
+		cleanupFugu14InitThread(thread);
 		return -1;
 	}
 	
@@ -122,15 +136,22 @@ int fugu14_kcall_init(int (^threadSigner)(mach_port_t threadPort))
 	uint64_t stack = 0;
 	if (kalloc_with_options(&stack, 0x4000 * 4, KALLOC_OPTION_LOCAL) != 0) { // Four pages
 		puts("[-] fugu14_kcall_init: Failed to allocate stack!");
+		cleanupFugu14InitThread(thread);
 		return -1;
 	}
 	stack += 0x8000;
 	guard (stack != 0) else {
 		puts("[-] fugu14_kcall_init: Failed to alloc kernel stack!");
+		cleanupFugu14InitThread(thread);
 		return -1;
 	}
 	
 	void *stackMapped = (void *)mapKernelPage(stack);
+	guard (stackMapped != NULL && stackMapped != (void *)-1) else {
+		puts("[-] fugu14_kcall_init: Failed to map kernel stack!");
+		cleanupFugu14InitThread(thread);
+		return -1;
+	}
 	kRegisterState *mappedState = (kRegisterState*)((uintptr_t) stackMapped);
 	
 	/*
@@ -162,6 +183,7 @@ int fugu14_kcall_init(int (^threadSigner)(mach_port_t threadPort))
 	// Sign thread state
 	if (threadSigner(thread) != 0) {
 		puts("[-] fugu14_kcall_init: Failed to sign thread!");
+		cleanupFugu14InitThread(thread);
 		return -1;
 	}
 	
@@ -196,7 +218,13 @@ int fugu14_kcall_init(int (^threadSigner)(mach_port_t threadPort))
 	mappedState->x[22] = ksymbol(exception_return);
 	
 	// Exception return expects a signed state in x21
-	mappedState->x[21] = getUserReturnThreadContext(); // Guaranteed to not fail at this point
+	uint64_t returnThreadContext = getUserReturnThreadContext();
+	if (returnThreadContext == 0) {
+		puts("[-] fugu14_kcall_init: Failed to get return thread context!");
+		cleanupFugu14InitThread(thread);
+		return -1;
+	}
+	mappedState->x[21] = returnThreadContext;
 	
 	// Also need to set sp
 	mappedState->sp = stack;

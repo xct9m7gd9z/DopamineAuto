@@ -80,6 +80,14 @@ class DopamineAutoRootHideSourceTests(unittest.TestCase):
         self.assertRegex(source, r"for \([^\n]+BAD_RECOVERY_MAX_ATTEMPTS[\s\S]{0,1200}breakCFI\(\)")
         self.assertRegex(source, r"breakCFI\(\)[\s\S]{0,1800}cleanupFailedBreakCFI")
 
+    def test_bad_recovery_retries_kcall_init_failure(self):
+        source = BAD_RECOVERY.read_text(encoding="utf-8")
+
+        self.assertRegex(
+            source,
+            r"if \(fugu14_kcall_init\([\s\S]{0,500}cleanupFailedBreakCFI\([^)]+\);[\s\S]{0,250}continue;",
+        )
+
     def test_pac_failure_cleans_loaded_pac_exploit(self):
         source = JAILBREAKER.read_text(encoding="utf-8")
 
@@ -92,6 +100,7 @@ class DopamineAutoRootHideSourceTests(unittest.TestCase):
         self.assertIn("KCALL_RETURN_TIMEOUT_NS", source)
         self.assertIn("kcallDeadline", source)
         self.assertIn("kcallTimedOut", source)
+        self.assertIn("gFugu14KcallLockInitialized", source)
         self.assertRegex(source, r"while \(!gUserReturnDidHappen\)[\s\S]{0,500}kcallTimedOut")
 
     def test_arm64_kcall_cannot_wait_forever(self):
