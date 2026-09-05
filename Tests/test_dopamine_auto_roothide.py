@@ -8,6 +8,9 @@ ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "Application/Dopamine/UI/DOMainViewController.m"
 SETTINGS = ROOT / "Application/Dopamine/UI/Settings/DOSettingsController.m"
 PROJECT = ROOT / "Application/Dopamine.xcodeproj/project.pbxproj"
+BAD_RECOVERY = ROOT / "Application/Dopamine/Exploits/badRecovery/badRecovery.m"
+FUGU14 = ROOT / "BaseBin/libjailbreak/src/kcall_Fugu14.c"
+ARM64 = ROOT / "BaseBin/libjailbreak/src/kcall_arm64.c"
 
 
 class DopamineAutoRootHideSourceTests(unittest.TestCase):
@@ -47,6 +50,38 @@ class DopamineAutoRootHideSourceTests(unittest.TestCase):
         self.assertIn("DO_AUTO_MAX_ATTEMPTS", source)
         self.assertIn("automaticAttemptCount < DO_AUTO_MAX_ATTEMPTS", source)
         self.assertIn('boolPreferenceValueForKey:@"exitWhenJailbroken" fallback:NO', source)
+
+    def test_bad_recovery_has_bounded_waits_and_failure_cleanup(self):
+        source = BAD_RECOVERY.read_text(encoding="utf-8")
+
+        self.assertIn("BAD_RECOVERY_STAGE_TIMEOUT_NS", source)
+        self.assertIn("badRecoveryDeadline", source)
+        self.assertIn("badRecoveryTimedOut", source)
+        self.assertIn("cleanupFailedBreakCFI", source)
+        self.assertIn("deinitFugu15PACBypass", source)
+        self.assertRegex(source, r"while \([^\n]+\)[\s\S]{0,500}badRecoveryTimedOut")
+
+    def test_bad_recovery_propagates_kcall_init_failure(self):
+        source = BAD_RECOVERY.read_text(encoding="utf-8")
+
+        self.assertIn("if (fugu14_kcall_init", source)
+        self.assertIn("return -1;", source)
+
+    def test_fugu14_kcall_cannot_wait_forever(self):
+        source = FUGU14.read_text(encoding="utf-8")
+
+        self.assertIn("KCALL_RETURN_TIMEOUT_NS", source)
+        self.assertIn("kcallDeadline", source)
+        self.assertIn("kcallTimedOut", source)
+        self.assertRegex(source, r"while \(!gUserReturnDidHappen\)[\s\S]{0,500}kcallTimedOut")
+
+    def test_arm64_kcall_cannot_wait_forever(self):
+        source = ARM64.read_text(encoding="utf-8")
+
+        self.assertIn("KCALL_RETURN_TIMEOUT_NS", source)
+        self.assertIn("kcallDeadline", source)
+        self.assertIn("kcallTimedOut", source)
+        self.assertRegex(source, r"while \(!gUserReturnDidHappen\)[\s\S]{0,500}kcallTimedOut")
 
 
 if __name__ == "__main__":

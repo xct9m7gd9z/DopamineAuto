@@ -5,6 +5,8 @@
 #include "kernel.h"
 #include "util.h"
 
+#include <mach/mach_time.h>
+
 Fugu14KcallThread gFugu14KcallThread;
 
 uint64_t gUserReturnThreadContext = 0;
@@ -16,6 +18,25 @@ void pac_loop(void);
 
 #define guard(cond) if (__builtin_expect(!!(cond), 1)) {}
 #define MEMORY_BARRIER asm volatile("dmb sy");
+#define KCALL_RETURN_TIMEOUT_NS (5ULL * 1000ULL * 1000ULL * 1000ULL)
+#define KCALL_TIMEOUT_RESULT UINT64_MAX
+
+static uint64_t kcallNowNs(void)
+{
+	mach_timebase_info_data_t timebase;
+	mach_timebase_info(&timebase);
+	return (uint64_t)(((__uint128_t)mach_absolute_time() * timebase.numer) / timebase.denom);
+}
+
+static uint64_t kcallDeadline(void)
+{
+	return kcallNowNs() + KCALL_RETURN_TIMEOUT_NS;
+}
+
+static bool kcallTimedOut(uint64_t deadline)
+{
+	return kcallNowNs() >= deadline;
+}
 
 uint64_t mapKernelPage(uint64_t addr)
 {
@@ -191,7 +212,15 @@ int fugu14_kcall_init(int (^threadSigner)(mach_port_t threadPort))
 	thread_resume(thread);
 	
 	// Wait for flag to be set
-	while (!gUserReturnDidHappen) ;
+	uint64_t deadline = kcallDeadline();
+	while (!gUserReturnDidHappen) {
+		if (kcallTimedOut(deadline)) {
+			puts("[-] fugu14_kcall_init: timed out waiting for return");
+			thread_suspend(thread);
+			thread_abort(thread);
+			return -1;
+		}
+	}
 	
 	// Stop thread
 	thread_suspend(thread);
@@ -259,7 +288,15 @@ uint64_t fugu14_kexec_on_thread_raw_locked(Fugu14KcallThread *callThread, kRegis
 	thread_resume(callThread->thread);
 	
 	// Wait for flag to be set
-	while (!gUserReturnDidHappen) ;
+	uint64_t deadline = kcallDeadline();
+	while (!gUserReturnDidHappen) {
+		if (kcallTimedOut(deadline)) {
+			puts("[-] fugu14_kexec: timed out waiting for return");
+			thread_suspend(callThread->thread);
+			thread_abort(callThread->thread);
+			return KCALL_TIMEOUT_RESULT;
+		}
+	}
 	
 	// Stop thread
 	thread_suspend(callThread->thread);

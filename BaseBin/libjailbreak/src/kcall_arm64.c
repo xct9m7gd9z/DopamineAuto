@@ -5,6 +5,8 @@
 #include "kernel.h"
 #include "util.h"
 
+#include <mach/mach_time.h>
+
 // Reuse return logic from Fugu14_Kcall
 // I don't like this as it breaks executing multiple threads at the same time
 // But as we don't even really do/support that currently anyways, it doesn't matter
@@ -14,6 +16,26 @@ extern volatile uint64_t gUserReturnDidHappen;
 #ifndef __arm64e__
 
 arm64KcallThread gArm64KcallThead;
+
+#define KCALL_RETURN_TIMEOUT_NS (5ULL * 1000ULL * 1000ULL * 1000ULL)
+#define KCALL_TIMEOUT_RESULT UINT64_MAX
+
+static uint64_t kcallNowNs(void)
+{
+	mach_timebase_info_data_t timebase;
+	mach_timebase_info(&timebase);
+	return (uint64_t)(((__uint128_t)mach_absolute_time() * timebase.numer) / timebase.denom);
+}
+
+static uint64_t kcallDeadline(void)
+{
+	return kcallNowNs() + KCALL_RETURN_TIMEOUT_NS;
+}
+
+static bool kcallTimedOut(uint64_t deadline)
+{
+	return kcallNowNs() >= deadline;
+}
 
 void arm64_kexec_on_thread_locked(arm64KcallThread *callThread, kRegisterState *threadState)
 {
@@ -88,7 +110,16 @@ uint64_t arm64_kcall_on_thread(arm64KcallThread *callThread, uint64_t func, int 
 
 	arm64_kexec_on_thread_locked(callThread, &threadState);
 
-	while (!gUserReturnDidHappen) ;
+	uint64_t deadline = kcallDeadline();
+	while (!gUserReturnDidHappen) {
+		if (kcallTimedOut(deadline)) {
+			puts("[-] arm64_kcall: timed out waiting for return");
+			thread_suspend(callThread->thread);
+			thread_abort(callThread->thread);
+			pthread_mutex_unlock(&callThread->lock);
+			return KCALL_TIMEOUT_RESULT;
+		}
+	}
 
 	thread_suspend(callThread->thread);
 	thread_abort(callThread->thread);
