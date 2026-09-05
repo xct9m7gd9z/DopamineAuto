@@ -65,7 +65,8 @@ class DopamineAutoRootHideSourceTests(unittest.TestCase):
     def test_bad_recovery_propagates_kcall_init_failure(self):
         source = BAD_RECOVERY.read_text(encoding="utf-8")
 
-        self.assertIn("if (fugu14_kcall_init", source)
+        self.assertIn("int kcallResult = fugu14_kcall_init", source)
+        self.assertIn("if (kcallResult != 0)", source)
         self.assertIn("return -1;", source)
 
     def test_bad_recovery_deinit_cleans_temporary_thread(self):
@@ -85,8 +86,22 @@ class DopamineAutoRootHideSourceTests(unittest.TestCase):
 
         self.assertRegex(
             source,
-            r"if \(fugu14_kcall_init\([\s\S]{0,500}cleanupFailedBreakCFI\([^)]+\);[\s\S]{0,250}continue;",
+            r"int kcallResult = fugu14_kcall_init\([\s\S]{0,700}if \(kcallResult != 0\)[\s\S]{0,300}cleanupFailedBreakCFI\([^)]+\);[\s\S]{0,250}continue;",
         )
+
+    def test_bad_recovery_emits_build_marker_and_phase_diagnostics(self):
+        source = BAD_RECOVERY.read_text(encoding="utf-8")
+
+        self.assertIn('#define BAD_RECOVERY_BUILD_MARKER "diag-20260905-1"', source)
+        self.assertIn("BAD_RECOVERY_LOG", source)
+        for phase in (
+            "breakCFI: cpu_data wait",
+            "breakCFI: cpu_data acquired",
+            "breakCFI: special memory",
+            "exploit_init: entering fugu14_kcall_init",
+            "exploit_init: fugu14_kcall_init returned",
+        ):
+            self.assertIn(phase, source)
 
     def test_pac_failure_cleans_loaded_pac_exploit(self):
         source = JAILBREAKER.read_text(encoding="utf-8")
