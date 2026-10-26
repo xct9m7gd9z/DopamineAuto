@@ -68,7 +68,7 @@ jobs:
           gmake -C TrollHelper FINALPACKAGE=1
           helper=TrollHelper/.theos/obj/TrollStorePersistenceHelper.app/TrollStorePersistenceHelper
           test -s "$helper"
-          lipo -verify_arch arm64 "$helper"
+          lipo "$helper" -verify_arch arm64
           strings "$helper" | grep -F 'auto-refresh-20261026-1'
           codesign -d --entitlements :- "$helper" > "$RUNNER_TEMP/helper-entitlements.plist"
           python3 - "$RUNNER_TEMP/helper-entitlements.plist" <<'PY'
