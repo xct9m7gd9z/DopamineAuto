@@ -133,6 +133,7 @@ jobs:
           print(f"display_name={display_name}")
           print(f"executable={executable}")
           print(f"executable_exists={executable_path.is_file() if executable_path else False}")
+          print(f"auto_build={info.get('DopamineAutoBuild')}")
 
           if bundle_id != "com.opa334.Dopamine-roothide":
               raise SystemExit("unexpected CFBundleIdentifier")
@@ -140,6 +141,12 @@ jobs:
               raise SystemExit("unexpected display name")
           if not executable_path or not executable_path.is_file():
               raise SystemExit("CFBundleExecutable does not exist")
+          if info.get("DopamineAutoBuild") != "sileo-default-20261026-1":
+              raise SystemExit("incorrect automatic Sileo build marker")
+          if b"sileo-default-20261026-1" not in executable_path.read_bytes():
+              raise SystemExit("executable is missing Sileo default initialization")
+          if not (app / "sileo.deb").is_file():
+              raise SystemExit("Sileo installation package is missing")
           PY
 
       - name: Verify artifact and write summary
@@ -150,6 +157,22 @@ jobs:
           unzip -t "$artifact"
 
           artifact_sha="$(shasum -a 256 "$artifact" | awk '{ print $1 }')"
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          artifact = Path("Application/DopamineAuto.tipa")
+          metadata = {
+              "source_sha": os.environ["GITHUB_SHA"],
+              "build_marker": "sileo-default-20261026-1",
+              "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+              "run_url": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+          }
+          Path("Application/DopamineAuto-build-info.json").write_text(json.dumps(metadata, indent=2) + "\n")
+          print(json.dumps(metadata, indent=2))
+          PY
           {
             echo "## DopamineAuto RootHide build"
             echo ""
@@ -166,7 +189,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: DopamineAuto-roothide-2.4.9-${{ env.shorthash }}-${{ github.run_number }}
-          path: ${{ github.workspace }}/Application/DopamineAuto.tipa
+          path: |
+            ${{ github.workspace }}/Application/DopamineAuto.tipa
+            ${{ github.workspace }}/Application/DopamineAuto-build-info.json
           if-no-files-found: error
           retention-days: 14
           compression-level: 0

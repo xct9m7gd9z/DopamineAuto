@@ -46,7 +46,9 @@ static NSTimeInterval const DO_AUTO_EXIT_DELAY_SECONDS = 3.0;
 - (void)viewDidLoad {
     [super viewDidLoad];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationDidBecomeActive:) name:UIApplicationDidBecomeActiveNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationDidBecomeActive:) name:UISceneDidActivateNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationWillResignActive:) name:UIApplicationWillResignActiveNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationWillResignActive:) name:UISceneWillDeactivateNotification object:nil];
     [self setupStack];
 }
 
@@ -96,7 +98,7 @@ static NSTimeInterval const DO_AUTO_EXIT_DELAY_SECONDS = 3.0;
     DOEnvironmentManager *environment = [DOEnvironmentManager sharedManager];
     DOPreferenceManager *preferences = [DOPreferenceManager sharedManager];
 
-    if (!environment.isInstalledThroughTrollStore || !environment.isBootstrapped)
+    if (!environment.isInstalledThroughTrollStore)
         return NO;
     if (!environment.isSupported || otherJailbreakActived(false))
         return NO;

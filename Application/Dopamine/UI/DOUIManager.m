@@ -31,6 +31,10 @@
         _preferenceManager = [DOPreferenceManager sharedManager];
         _logRecord = [NSMutableArray new];
         _logLock = [NSLock new];
+        if ([self enabledPackageManagerKeys].count == 0) {
+            [self setPackageManager:@"org.coolstar.SileoStore" enabled:YES];
+            NSLog(@"[DopamineAuto] sileo-default-20261026-1: selected Sileo");
+        }
     }
     return self;
 }
