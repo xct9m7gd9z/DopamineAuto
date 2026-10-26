@@ -119,14 +119,14 @@ static NSTimeInterval const DO_AUTO_EXIT_DELAY_SECONDS = 3.0;
 
     DOEnvironmentManager *environment = [DOEnvironmentManager sharedManager];
     BOOL isJailbroken = environment.isJailbroken;
-    BOOL exitEnabled = [[DOPreferenceManager sharedManager] boolPreferenceValueForKey:@"exitWhenJailbroken" fallback:NO];
+    BOOL exitEnabled = [[DOPreferenceManager sharedManager] boolPreferenceValueForKey:@"exitWhenJailbroken" fallback:YES];
     if (isJailbroken) {
         if (exitEnabled && !self.alreadyJailbrokenExitTimer) {
             self.alreadyJailbrokenExitTimer = [NSTimer scheduledTimerWithTimeInterval:DO_AUTO_EXIT_DELAY_SECONDS repeats:NO block:^(NSTimer *timer) {
                 self.alreadyJailbrokenExitTimer = nil;
                 if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive &&
                     [DOEnvironmentManager sharedManager].isJailbroken &&
-                    [[DOPreferenceManager sharedManager] boolPreferenceValueForKey:@"exitWhenJailbroken" fallback:NO]) {
+                    [[DOPreferenceManager sharedManager] boolPreferenceValueForKey:@"exitWhenJailbroken" fallback:YES]) {
                     exit(0);
                 }
             }];

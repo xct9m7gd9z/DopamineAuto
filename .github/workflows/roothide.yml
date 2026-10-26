@@ -151,9 +151,9 @@ jobs:
               raise SystemExit("unexpected display name")
           if not executable_path or not executable_path.is_file():
               raise SystemExit("CFBundleExecutable does not exist")
-          if info.get("DopamineAutoBuild") != "sileo-password-20261026-1":
+          if info.get("DopamineAutoBuild") != "sileo-password-exit-20261026-1":
               raise SystemExit("incorrect automatic Sileo build marker")
-          if b"sileo-password-20261026-1" not in executable_path.read_bytes():
+          if b"sileo-password-exit-20261026-1" not in executable_path.read_bytes():
               raise SystemExit("executable is missing Sileo default initialization")
           if not (app / "sileo.deb").is_file():
               raise SystemExit("Sileo installation package is missing")
@@ -190,8 +190,9 @@ jobs:
           artifact = Path("Application/DopamineAuto.tipa")
           metadata = {
               "source_sha": os.environ["GITHUB_SHA"],
-              "build_marker": "sileo-password-20261026-1",
+              "build_marker": "sileo-password-exit-20261026-1",
               "bootstrap_marker": "preset-mobile-password-20261026-1",
+              "default_exit_when_jailbroken": True,
               "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
               "run_url": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
           }

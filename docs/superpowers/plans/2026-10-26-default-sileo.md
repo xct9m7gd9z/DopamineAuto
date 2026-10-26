@@ -24,6 +24,11 @@ before removing the setup script if changing the password fails, preserving
 the initialization retry path. Leave existing bootstraps' passwords unchanged.
 Verify shell success/failure paths and all archive members after patching.
 
+The user's final settings change enables `exitWhenJailbroken` by default.
+Set the Settings switch default and both timer checks to YES, while respecting
+any explicitly saved value. Keep the existing three-second exit delay. Include
+the default in build metadata to distinguish this final package.
+
 - [ ] Run the unchanged baseline tests in the isolated `Dopamine-auto-sileo`
   worktree, based on the previously delivered remote commit `a57538b`.
 - [ ] Add native Foundation tests that execute the actual DOUIManager selection

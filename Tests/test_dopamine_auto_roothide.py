@@ -23,14 +23,11 @@ class DopamineAutoRootHideSourceTests(unittest.TestCase):
     def test_automatic_settings_have_expected_defaults(self):
         source = SETTINGS.read_text(encoding="utf-8")
 
-        for key, default in (("autoJailbreakEnabled", "YES"), ("exitWhenJailbroken", "NO")):
-            pattern = re.compile(
-                rf'setProperty:@?YES forKey:@"enabled"[\s\S]+?'
-                rf'setProperty:@"{key}" forKey:@"key"[\s\S]+?'
-                rf'setProperty:@{default} forKey:@"default"',
-                re.MULTILINE,
-            )
-            self.assertRegex(source, pattern)
+        for variable, key in (("autoJailbreakSpecifier", "autoJailbreakEnabled"),
+                              ("exitWhenJailbrokenSpecifier", "exitWhenJailbroken")):
+            self.assertIn(f'[{variable} setProperty:@YES forKey:@"enabled"];', source)
+            self.assertIn(f'[{variable} setProperty:@"{key}" forKey:@"key"];', source)
+            self.assertIn(f'[{variable} setProperty:@YES forKey:@"default"];', source)
 
     def test_startup_uses_readiness_polling_without_countdown(self):
         source = MAIN.read_text(encoding="utf-8")
@@ -45,13 +42,14 @@ class DopamineAutoRootHideSourceTests(unittest.TestCase):
         self.assertNotIn("DO_AUTO_JAILBREAK_DELAY_SECONDS", source)
         self.assertNotIn("Auto_Jailbreak_Countdown", source)
 
-    def test_automatic_retry_is_bounded_and_exit_defaults_off(self):
+    def test_automatic_retry_is_bounded_and_exit_defaults_on(self):
         source = MAIN.read_text(encoding="utf-8")
 
         self.assertIn("DO_AUTO_RETRY_DELAY_SECONDS", source)
         self.assertIn("DO_AUTO_MAX_ATTEMPTS", source)
         self.assertIn("automaticAttemptCount < DO_AUTO_MAX_ATTEMPTS", source)
-        self.assertIn('boolPreferenceValueForKey:@"exitWhenJailbroken" fallback:NO', source)
+        self.assertIn('boolPreferenceValueForKey:@"exitWhenJailbroken" fallback:YES', source)
+        self.assertNotIn('boolPreferenceValueForKey:@"exitWhenJailbroken" fallback:NO', source)
 
     def test_bad_recovery_has_bounded_waits_and_failure_cleanup(self):
         source = BAD_RECOVERY.read_text(encoding="utf-8")
