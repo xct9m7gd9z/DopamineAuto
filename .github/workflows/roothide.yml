@@ -51,6 +51,12 @@ jobs:
           test "$installed_xcode" = "$XCODE_VERSION"
           xcodebuild -version
 
+      - name: Install bootstrap archive tooling
+        run: |
+          set -euo pipefail
+          python3 -m pip install --target "$RUNNER_TEMP/bootstrap-python" zstandard==0.25.0
+          echo "PYTHONPATH=$RUNNER_TEMP/bootstrap-python" >> "$GITHUB_ENV"
+
       - name: Test DopamineAuto RootHide source contracts
         run: |
           set -euo pipefail
@@ -108,6 +114,9 @@ jobs:
         run: |
           set -euo pipefail
           export THEOS="$GITHUB_WORKSPACE/theos"
+          python3 scripts/prepare_unattended_bootstrap.py \
+            Application/Dopamine/Resources/bootstrap_1800.tar.zst \
+            Application/Dopamine/Resources/bootstrap_1900.tar.zst
           gmake -j"$(sysctl -n hw.logicalcpu)" NIGHTLY=1
           mv "$GITHUB_WORKSPACE/Application/Dopamine.tipa" \
             "$GITHUB_WORKSPACE/Application/DopamineAuto.tipa"
@@ -142,12 +151,26 @@ jobs:
               raise SystemExit("unexpected display name")
           if not executable_path or not executable_path.is_file():
               raise SystemExit("CFBundleExecutable does not exist")
-          if info.get("DopamineAutoBuild") != "sileo-default-20261026-1":
+          if info.get("DopamineAutoBuild") != "sileo-password-20261026-1":
               raise SystemExit("incorrect automatic Sileo build marker")
-          if b"sileo-default-20261026-1" not in executable_path.read_bytes():
+          if b"sileo-password-20261026-1" not in executable_path.read_bytes():
               raise SystemExit("executable is missing Sileo default initialization")
           if not (app / "sileo.deb").is_file():
               raise SystemExit("Sileo installation package is missing")
+          import tarfile
+          import zstandard
+          for name in ("bootstrap_1800.tar.zst", "bootstrap_1900.tar.zst"):
+              with (app / name).open("rb") as compressed:
+                  with zstandard.ZstdDecompressor().stream_reader(compressed) as decoded:
+                      with tarfile.open(fileobj=decoded, mode="r|") as archive:
+                          for member in archive:
+                              if member.name.removeprefix("./") == "prep_bootstrap.sh":
+                                  script = archive.extractfile(member).read()
+                                  if b"preset-mobile-password-20261026-1" not in script or b"uialert" in script:
+                                      raise SystemExit(f"unattended password setup missing in {name}")
+                                  break
+                          else:
+                              raise SystemExit(f"setup script missing in {name}")
           PY
 
       - name: Verify artifact and write summary
@@ -167,7 +190,8 @@ jobs:
           artifact = Path("Application/DopamineAuto.tipa")
           metadata = {
               "source_sha": os.environ["GITHUB_SHA"],
-              "build_marker": "sileo-default-20261026-1",
+              "build_marker": "sileo-password-20261026-1",
+              "bootstrap_marker": "preset-mobile-password-20261026-1",
               "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
               "run_url": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
           }
