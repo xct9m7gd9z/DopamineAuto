@@ -15,6 +15,7 @@
 	TSPresentationDelegate.presentationViewController = self;
 
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reloadSpecifiers) name:UIApplicationWillEnterForegroundNotification object:nil];
+	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(autoRefreshIfReady) name:UIApplicationDidBecomeActiveNotification object:nil];
 
 	fetchLatestTrollStoreVersion(^(NSString* latestVersion)
 	{
@@ -29,6 +30,23 @@
 			});
 		}
 	});
+}
+
+- (void)viewDidAppear:(BOOL)animated
+{
+	[super viewDidAppear:animated];
+	[self autoRefreshIfReady];
+}
+
+- (void)autoRefreshIfReady
+{
+	BOOL active = UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
+	BOOL visible = self.isViewLoaded && self.view.window != nil;
+	if (TSHTryStartAutoRefresh(&_autoRefreshGate, active, visible))
+	{
+		NSLog(@"[TrollHelperAutoRefresh] auto-refresh-20261026-1: refreshing registrations");
+		[self refreshAppRegistrationsPressed];
+	}
 }
 
 - (NSMutableArray*)specifiers

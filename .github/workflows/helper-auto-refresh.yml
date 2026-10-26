@@ -16,12 +16,105 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 40
+    env:
+      THEOS_COMMIT: 304e0799973e8145f32e4ca2de6c747a84b758ce
+      SDK_URL: https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
+      SDK_SHA256: 5e0fd3f01266cce4ce012d4a99b38eb56578fca40d09edc81cd83dee958202fb
+      OFFICIAL_URL: https://github.com/opa334/TrollStore/releases/download/2.1.1/TrollStore.tar
+      OFFICIAL_SHA256: 144dc741d1b74d582c861e6ed504ddced3745724e216e3de79ab7d37b27d0551
     steps:
       - name: Check out source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          submodules: recursive
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@1242409711ff5721add51979e9e11e23ebb7e5a4
+        with:
+          xcode-version: '16.4'
 
       - name: Test activation and duplicate callback behavior
         run: |
           set -euo pipefail
           clang -std=c11 -Wall -Wextra -Werror Tests/test_auto_refresh.c -o "$RUNNER_TEMP/test_auto_refresh"
           "$RUNNER_TEMP/test_auto_refresh"
+
+      - name: Test update archive preservation
+        run: python3 -B -m unittest discover -s Tests -p 'test_*.py' -v
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          brew install make ldid libarchive pkg-config openssl@3
+          echo "PATH=$(brew --prefix make)/libexec/gnubin:$PATH" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: Install pinned Theos and SDK
+        run: |
+          set -euo pipefail
+          export THEOS="$RUNNER_TEMP/theos"
+          git clone --no-checkout https://github.com/theos/theos.git "$THEOS"
+          git -C "$THEOS" checkout --detach "$THEOS_COMMIT"
+          git -C "$THEOS" submodule update --init --recursive
+          curl --fail --location --retry 3 "$SDK_URL" -o "$RUNNER_TEMP/sdk.tar.xz"
+          printf '%s  %s\n' "$SDK_SHA256" "$RUNNER_TEMP/sdk.tar.xz" | shasum -a 256 -c -
+          tar -xJf "$RUNNER_TEMP/sdk.tar.xz" -C "$THEOS/sdks"
+          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+
+      - name: Build and sign the custom persistence helper
+        run: |
+          set -euo pipefail
+          gmake -C Exploits/fastPathSign
+          gmake -C TrollHelper FINALPACKAGE=1
+          helper=TrollHelper/.theos/obj/TrollStorePersistenceHelper.app/TrollStorePersistenceHelper
+          test -s "$helper"
+          lipo -verify_arch arm64 "$helper"
+          strings "$helper" | grep -F 'auto-refresh-20261026-1'
+          codesign -d --entitlements :- "$helper" > "$RUNNER_TEMP/helper-entitlements.plist"
+          python3 - "$RUNNER_TEMP/helper-entitlements.plist" <<'PY'
+          import plistlib, sys
+          with open(sys.argv[1], 'rb') as file:
+              entitlements = plistlib.load(file)
+          for key in ('platform-application', 'com.apple.private.persona-mgmt',
+                      'com.apple.private.security.no-sandbox'):
+              if entitlements.get(key) is not True:
+                  raise SystemExit(f'missing required entitlement: {key}')
+          PY
+
+      - name: Package and verify the TrollStore update
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 "$OFFICIAL_URL" -o "$RUNNER_TEMP/TrollStore-official.tar"
+          printf '%s  %s\n' "$OFFICIAL_SHA256" "$RUNNER_TEMP/TrollStore-official.tar" | shasum -a 256 -c -
+          mkdir -p _build
+          python3 scripts/package_update.py "$RUNNER_TEMP/TrollStore-official.tar" \
+            TrollHelper/.theos/obj/TrollStorePersistenceHelper.app/TrollStorePersistenceHelper \
+            _build/TrollStoreAutoRefresh-2.1.1.tar
+          cp INSTALL-AUTO-REFRESH.md _build/
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          artifact = Path('_build/TrollStoreAutoRefresh-2.1.1.tar')
+          manifest = {
+              'source_sha': os.environ['GITHUB_SHA'],
+              'upstream_source_sha': '88424f683b2a08f34a3f88985f790f97d84ce1df',
+              'official_version': '2.1.1',
+              'official_archive_sha256': os.environ['OFFICIAL_SHA256'],
+              'theos_sha': os.environ['THEOS_COMMIT'],
+              'build_marker': 'auto-refresh-20261026-1',
+              'artifact': artifact.name,
+              'sha256': hashlib.sha256(artifact.read_bytes()).hexdigest(),
+              'run_url': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+          }
+          Path('_build/build-info.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          print(json.dumps(manifest, indent=2))
+          PY
+          echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Upload installable update
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: TrollStoreAutoRefresh-2.1.1-${{ env.short_sha }}-${{ github.run_number }}
+          path: _build/
+          if-no-files-found: error
+          retention-days: 30

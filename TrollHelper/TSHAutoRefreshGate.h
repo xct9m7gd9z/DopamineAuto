@@ -9,10 +9,9 @@ typedef struct {
 
 static inline bool TSHTryStartAutoRefresh(TSHAutoRefreshGate *gate, bool active, bool visible)
 {
-    (void)gate;
-    (void)active;
-    (void)visible;
-    return false;
+    if (gate->started || !active || !visible) return false;
+    gate->started = true;
+    return true;
 }
 
 #endif
