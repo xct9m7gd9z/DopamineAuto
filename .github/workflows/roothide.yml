@@ -73,6 +73,7 @@ jobs:
           export THEOS="$GITHUB_WORKSPACE/theos"
 
           git clone --no-checkout "$THEOS_REPOSITORY" "$THEOS"
+          git -C "$THEOS" fetch --depth=1 origin "$THEOS_COMMIT"
           git -C "$THEOS" checkout --detach "$THEOS_COMMIT"
           git -C "$THEOS" submodule update --init --recursive
 
