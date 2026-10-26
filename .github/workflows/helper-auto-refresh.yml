@@ -1,0 +1,27 @@
+name: TrollStore Helper Auto Refresh
+
+on:
+  push:
+    branches: [trollstore-auto-refresh]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helper-auto-refresh-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Test activation and duplicate callback behavior
+        run: |
+          set -euo pipefail
+          clang -std=c11 -Wall -Wextra -Werror Tests/test_auto_refresh.c -o "$RUNNER_TEMP/test_auto_refresh"
+          "$RUNNER_TEMP/test_auto_refresh"
