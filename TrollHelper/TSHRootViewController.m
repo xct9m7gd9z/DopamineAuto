@@ -16,6 +16,7 @@
 
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reloadSpecifiers) name:UIApplicationWillEnterForegroundNotification object:nil];
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(autoRefreshIfReady) name:UIApplicationDidBecomeActiveNotification object:nil];
+	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(autoRefreshIfReady) name:UISceneDidActivateNotification object:nil];
 
 	fetchLatestTrollStoreVersion(^(NSString* latestVersion)
 	{
