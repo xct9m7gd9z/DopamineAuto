@@ -1,4 +1,5 @@
 import re
+import operator
 import subprocess
 import sys
 import tempfile
@@ -57,6 +58,16 @@ class NativePACFieldMappingTests(unittest.TestCase):
 
 
 class PACFieldMappingIntegrationTests(unittest.TestCase):
+    def test_kcall_accepts_success_and_rejects_negative_failure(self):
+        source = (PAC / "badRecovery.m").read_text(encoding="utf-8")
+        comparison = re.search(r"if \(kcallResult (==|!=) (-?\d+)\)", source)
+        self.assertIsNotNone(comparison)
+        operation = operator.eq if comparison[1] == "==" else operator.ne
+        failure_check = lambda result: operation(result, int(comparison[2]))
+        self.assertFalse(failure_check(1), "Fugu14 initialization returns 1 on success")
+        self.assertTrue(failure_check(-1), "Fugu14 initialization returns -1 on failure")
+        self.assertTrue(failure_check(0), "an uninitialized result must not count as success")
+
     def test_all_four_fields_are_mapped_before_the_interrupt_stack_changes(self):
         source = (PAC / "badRecovery.m").read_text(encoding="utf-8")
         setup = source.split("bool breakCFI(void)", 1)[1].split("uint64_t signedFaultHandler", 1)[0]

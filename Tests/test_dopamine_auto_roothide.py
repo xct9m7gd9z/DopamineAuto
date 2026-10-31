@@ -65,14 +65,14 @@ class DopamineAutoRootHideSourceTests(unittest.TestCase):
         source = BAD_RECOVERY.read_text(encoding="utf-8")
 
         self.assertIn("int kcallResult = fugu14_kcall_init", source)
-        self.assertIn("if (kcallResult == 0)", source)
+        self.assertIn("if (kcallResult != 1)", source)
         self.assertIn("return -1;", source)
 
     def test_bad_recovery_accepts_fugu14_success_value(self):
         source = BAD_RECOVERY.read_text(encoding="utf-8")
 
         self.assertNotIn("if (kcallResult != 0)", source)
-        self.assertIn("if (kcallResult == 0)", source)
+        self.assertIn("if (kcallResult != 1)", source)
 
     def test_bad_recovery_deinit_cleans_temporary_thread(self):
         source = BAD_RECOVERY.read_text(encoding="utf-8")
@@ -91,7 +91,7 @@ class DopamineAutoRootHideSourceTests(unittest.TestCase):
 
         self.assertRegex(
             source,
-            r"int kcallResult = fugu14_kcall_init\([\s\S]{0,700}if \(kcallResult == 0\)[\s\S]{0,300}cleanupFailedBreakCFI\([^)]+\);[\s\S]{0,250}continue;",
+            r"int kcallResult = fugu14_kcall_init\([\s\S]{0,700}if \(kcallResult != 1\)[\s\S]{0,300}cleanupFailedBreakCFI\([^)]+\);[\s\S]{0,250}continue;",
         )
 
     def test_bad_recovery_emits_build_marker_and_phase_diagnostics(self):

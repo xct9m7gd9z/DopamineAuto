@@ -21,6 +21,9 @@ previous `599e54c` package. `breakCFI +1204` loads `thread.recover` at
 - [ ] Test every aligned thread placement in a 16 KB page with all four field
   offsets, plus mapping failures and address overflow. Verify C and assembly
   register agreement. Run the existing startup and unattended bootstrap tests.
+- [ ] Correct the PAC initialization result check: Fugu14 returns 1 on success
+  and -1 on failure. The existing `== 0` check misses negative failures. A
+  regression must demonstrate that 1 succeeds and -1/0 take the failure path.
 - [ ] Assign a PAC-fix build marker, compile using the pinned existing CI,
   upload symbols for any subsequent device crash, and download the verified
   ZIP/TIPA/build manifest into the workspace outputs directory.
