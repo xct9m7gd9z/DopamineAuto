@@ -13,7 +13,7 @@ PAC = ROOT / "Application/Dopamine/Exploits/badRecovery"
 def production_mapper():
     source = (PAC / "badRecovery.m").read_text(encoding="utf-8")
     mapped = re.search(
-        r"static volatile uint64_t \*badRecoveryMapThreadField\([^;]+?^\}",
+        r"static volatile uint64_t \*badRecoveryMapThreadField\([^\n]+\)\s*\{.*?^\}",
         source, re.MULTILINE | re.DOTALL,
     )
     if mapped:
@@ -54,3 +54,24 @@ class NativePACFieldMappingTests(unittest.TestCase):
     def test_null_mapping_is_rejected(self): self.run_case("zero-map")
     def test_minus_one_mapping_is_rejected(self): self.run_case("failed-map")
     def test_invalid_field_addresses_never_reach_mapper(self): self.run_case("invalid-addresses")
+
+
+class PACFieldMappingIntegrationTests(unittest.TestCase):
+    def test_all_four_fields_are_mapped_before_the_interrupt_stack_changes(self):
+        source = (PAC / "badRecovery.m").read_text(encoding="utf-8")
+        setup = source.split("bool breakCFI(void)", 1)[1].split("uint64_t signedFaultHandler", 1)[0]
+        for field, offset in (("recoverField", "recover"), ("cpuDataField", "machine_CpuDatap"),
+                              ("kstackptrField", "machine_kstackptr"), ("contextDataField", "machine_contextData")):
+            self.assertIn(f"*{field} = badRecoveryMapThreadField(chThreadPtr, koffsetof(thread, {offset}));", setup)
+        self.assertIn("guard (recoverField && cpuDataField && kstackptrField && contextDataField)", setup)
+        self.assertNotIn("mapAddr + koffsetof", source)
+
+    def test_c_and_assembly_use_the_same_direct_field_pointers(self):
+        source = (PAC / "badRecovery.m").read_text(encoding="utf-8")
+        assembly = (PAC / "badRecovery.s").read_text(encoding="utf-8")
+        for register, field in ((11, "cpuDataField"), (26, "kstackptrField"), (27, "contextDataField")):
+            self.assertIn(f".__x[{register}] = (uint64_t)(uintptr_t){field};", source)
+        self.assertEqual(assembly.count("ldr x24, [x11]"), 2)
+        self.assertIn("str x19, [x26]", assembly)
+        self.assertIn("str x18, [x27]", assembly)
+        self.assertNotRegex(assembly, r"\[x11, x2[567]\]")

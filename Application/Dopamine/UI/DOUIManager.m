@@ -33,7 +33,7 @@
         _logLock = [NSLock new];
         if ([self enabledPackageManagerKeys].count == 0) {
             [self setPackageManager:@"org.coolstar.SileoStore" enabled:YES];
-            NSLog(@"[DopamineAuto] sileo-password-exit-20261026-1: selected Sileo");
+            NSLog(@"[DopamineAuto] pac-field-mapping-20261101-1: selected Sileo");
         }
     }
     return self;

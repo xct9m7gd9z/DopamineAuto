@@ -97,7 +97,7 @@ class DopamineAutoRootHideSourceTests(unittest.TestCase):
     def test_bad_recovery_emits_build_marker_and_phase_diagnostics(self):
         source = BAD_RECOVERY.read_text(encoding="utf-8")
 
-        self.assertIn('#define BAD_RECOVERY_BUILD_MARKER "diag-20260905-1"', source)
+        self.assertIn('#define BAD_RECOVERY_BUILD_MARKER "pac-fields-20261101-1"', source)
         self.assertIn("BAD_RECOVERY_LOG", source)
         for phase in (
             "breakCFI: cpu_data wait",

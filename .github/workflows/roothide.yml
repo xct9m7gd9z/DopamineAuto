@@ -151,10 +151,13 @@ jobs:
               raise SystemExit("unexpected display name")
           if not executable_path or not executable_path.is_file():
               raise SystemExit("CFBundleExecutable does not exist")
-          if info.get("DopamineAutoBuild") != "sileo-password-exit-20261026-1":
+          if info.get("DopamineAutoBuild") != "pac-field-mapping-20261101-1":
               raise SystemExit("incorrect automatic Sileo build marker")
-          if b"sileo-password-exit-20261026-1" not in executable_path.read_bytes():
+          if b"pac-field-mapping-20261101-1" not in executable_path.read_bytes():
               raise SystemExit("executable is missing Sileo default initialization")
+          pac_binary = app / "Frameworks/badRecovery.framework/badRecovery"
+          if b"pac-fields-20261101-1" not in pac_binary.read_bytes():
+              raise SystemExit("PAC framework is missing the field mapping fix marker")
           if not (app / "sileo.deb").is_file():
               raise SystemExit("Sileo installation package is missing")
           import tarfile
@@ -173,6 +176,20 @@ jobs:
                               raise SystemExit(f"setup script missing in {name}")
           PY
 
+      - name: Preserve matching crash symbols
+        run: |
+          set -euo pipefail
+          app="$GITHUB_WORKSPACE/Application/build/Build/Products/Debug-iphoneos/Dopamine.app"
+          symbols="$GITHUB_WORKSPACE/Application/CrashSymbols"
+          mkdir -p "$symbols"
+          xcrun dsymutil "$app/Dopamine" -o "$symbols/Dopamine.app.dSYM"
+          xcrun dsymutil "$app/Frameworks/badRecovery.framework/badRecovery" -o "$symbols/badRecovery.framework.dSYM"
+          test -s "$symbols/Dopamine.app.dSYM/Contents/Resources/DWARF/Dopamine"
+          test -s "$symbols/badRecovery.framework.dSYM/Contents/Resources/DWARF/badRecovery"
+          xcrun dwarfdump --uuid "$symbols/Dopamine.app.dSYM"
+          xcrun dwarfdump --uuid "$symbols/badRecovery.framework.dSYM"
+          ditto -c -k --keepParent "$symbols" "$GITHUB_WORKSPACE/Application/DopamineAuto-CrashSymbols.zip"
+
       - name: Verify artifact and write summary
         run: |
           set -euo pipefail
@@ -185,16 +202,23 @@ jobs:
           import hashlib
           import json
           import os
+          import subprocess
           from pathlib import Path
 
           artifact = Path("Application/DopamineAuto.tipa")
           metadata = {
               "source_sha": os.environ["GITHUB_SHA"],
-              "build_marker": "sileo-password-exit-20261026-1",
+              "build_marker": "pac-field-mapping-20261101-1",
+              "pac_marker": "pac-fields-20261101-1",
               "bootstrap_marker": "preset-mobile-password-20261026-1",
               "default_exit_when_jailbroken": True,
               "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
               "run_url": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              "symbols_sha256": hashlib.sha256(Path("Application/DopamineAuto-CrashSymbols.zip").read_bytes()).hexdigest(),
+              "symbol_uuids": subprocess.check_output([
+                  "xcrun", "dwarfdump", "--uuid", "Application/CrashSymbols/Dopamine.app.dSYM",
+                  "Application/CrashSymbols/badRecovery.framework.dSYM",
+              ], text=True).splitlines(),
           }
           Path("Application/DopamineAuto-build-info.json").write_text(json.dumps(metadata, indent=2) + "\n")
           print(json.dumps(metadata, indent=2))
@@ -218,6 +242,7 @@ jobs:
           path: |
             ${{ github.workspace }}/Application/DopamineAuto.tipa
             ${{ github.workspace }}/Application/DopamineAuto-build-info.json
+            ${{ github.workspace }}/Application/DopamineAuto-CrashSymbols.zip
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
